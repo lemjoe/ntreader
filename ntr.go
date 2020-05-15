@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"flag"
@@ -13,14 +14,11 @@ import (
 	"time"
 )
 
-// Flags
+// Arrays for GUIDs/paths lists
+var guids = []string{}
+var paths = []string{}
 
-var o301, b0ff = false, false
-
-// Guids/paths list
-var guids = []string{"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}", "{6D809377-6AF0-444B-8957-A3773F02200E}", "{7C5A40EF-A0FB-4BFC-874A-C0F2E0B9FA8E}", "{F38BF404-1D43-42F2-9305-67DE0B28FC23}", "{0139D44E-6AFE-49F2-8690-3DAFCAE6FFB8}", "{9E3995AB-1F9C-4F13-B827-48B24B6C7174}", "{A77F5D77-2E2B-44C3-A6A2-ABA601054A51}", "{D65231B0-B2F1-4857-A4CE-A8E7C6EA7D27}", "E7CF176E110C211B", "308046B0AF4A39CB", "Lister{CECFE544-EF6E-499d-8F87-56B61FA2EC44}"}
-var paths = []string{"C:\\Windows\\System32", "C:\\Program Files", "C:\\Program Files (x86)", "C:\\Windows", "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs", "Application Data\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned", "Application Data\\Microsoft\\Windows\\Start Menu\\Programs", "C:\\Windows\\SysWOW64", "Mozilla Firefox", "Mozilla Firefox", "Total Commander"}
-
+// Structure that describes every found UserAssist entry and sometimes something else
 type record struct {
 	offset  int
 	path    string
@@ -40,20 +38,21 @@ func pathSwap(init string) string {
 	return init
 }
 
-// Rot13 implementatioin
-func rot13(sb byte) byte {
-	s := rune(sb)
-	if s >= 'a' && s <= 'm' || s >= 'A' && s <= 'M' {
-		sb += 13
+// Rot13
+func rot13(x byte) byte {
+	y := rune(x)
+	if y >= 'a' && y <= 'm' || y >= 'A' && y <= 'M' {
+		x += 13
 	}
-	if s >= 'n' && s <= 'z' || s >= 'N' && s <= 'Z' {
-		sb -= 13
+	if y >= 'n' && y <= 'z' || y >= 'N' && y <= 'Z' {
+		x -= 13
 	}
-	return sb
+	return x
 }
 
 // Main entry point
 func main() {
+	// Memorizing current time for debugging purposes
 	startTime := time.Now()
 
 	// Parsing command-line arguments
@@ -62,7 +61,7 @@ func main() {
 	outputFile := flag.String("out", "report.txt", "Path to file with output results")
 	flag.Parse()
 
-	// Trying to create log file
+	// Trying to create or open existing log file
 	if *logFile != "" {
 		lf, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 		if err != nil {
@@ -80,6 +79,30 @@ func main() {
 	}
 	log.Printf("NTUSER.DAT is correct\r\n")
 
+	// guids file block:
+	// Trying to open guids file
+	gfile, err := os.Open("guids")
+	if err != nil {
+		log.Printf("guids file reading error:  %v\r\n", err)
+	}
+	log.Printf("guids file is correct\r\n")
+	defer gfile.Close()
+	scanner := bufio.NewScanner(gfile)
+	// Reading GUIDs list from file
+	t1 := false
+	for scanner.Scan() {
+		if t1 == false {
+			guids = strings.Split(fmt.Sprintln(scanner.Text()), "??")
+			t1 = true
+		}
+		// Reading paths list from file
+		paths = strings.Split(fmt.Sprintln(scanner.Text()), "??")
+	}
+	// Read error check
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+
 	// Trying to create output file
 	of, err := os.OpenFile(*outputFile, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -87,29 +110,33 @@ func main() {
 	}
 	log.Printf("Output file successfully created\r\n")
 
+	// Some variables
 	var substr []byte
 	var records []record
+
+	// Begin to process NTUSER.DAT
 	log.Printf("Start processing\r\n")
+
+	// Read every 4 bytes of file and compare with signatures
 	for i := 0; i < (len(data) / 4); i++ {
 		fmt.Printf("offset: %x value: %v utf-8: [ %v ]\n", i*4, data[i*4:(i+1)*4], string(data[i*4:(i+1)*4]))
+		// Program met 0x03 0x00 0x00 0x00 0x01 0x00 0x00 0x00 signature. Trying to recognize path to file
 		if bytes.Equal(data[i*4:(i+2)*4], []byte{3, 0, 0, 0, 1, 0, 0, 0}) {
-			o301 = true
 			for j, k := i+2, 0; ; j++ {
 				fmt.Printf("offset: %x value: %v utf-8: [ %v ]\n", j*4, data[j*4:(j+1)*4], string(data[j*4:(j+1)*4]))
 				if k > 100 {
 					substr = nil
 					i = j
-					break
+					break // Path is too long. Going back and looking for the correct entry
 				}
+				// Program met 0xb0 0xff 0xff 0xff signature. Fill the fields of record in 'records' structure
 				if bytes.Equal(data[j*4:(j+1)*4], []byte{176, 255, 255, 255}) {
-					b0ff = true
-					o301 = false
 					tmpTime := syscall.Filetime{binary.LittleEndian.Uint32(data[(j+16)*4 : (j+17)*4]), binary.LittleEndian.Uint32(data[(j+17)*4 : (j+18)*4])}
 					tmpRecord := record{(i + 2) * 4, pathSwap(string(substr)), binary.LittleEndian.Uint32(data[(j+2)*4 : (j+3)*4]), time.Unix(0, tmpTime.Nanoseconds())}
 					records = append(records, tmpRecord)
 					i = j
 					substr = nil
-					break
+					break // Going back and looking for the next entry
 				}
 				substr = append(substr, rot13(data[j*4]), rot13(data[j*4+1]), rot13(data[j*4+2]), rot13(data[j*4+3]))
 				k++
@@ -118,20 +145,28 @@ func main() {
 
 		}
 	}
+
+	// Preprocessing of 'records' structure
 	lastExec := ""
 	for a, b := range records {
+		// Checking is last execution time correct
 		if b.last.Sub(time.Now()).Hours() > 72 || b.last.Sub(time.Unix(0, 0)).Hours() < 0 {
 			lastExec = "No correct data"
 		} else {
 			lastExec = fmt.Sprintf("%v", b.last)
 		}
+		// Building output string
 		message := []byte(fmt.Sprintf("Number: %v | Offset: %x | File: %v | Runs count: %v | Last launch: %v\r\n", a, b.offset, b.path, b.counter, lastExec))
+		// Write output string to file
 		if *outputFile != "" {
 			of.Write(message)
 		}
+		// Print output string
 		fmt.Printf(string(message))
 	}
 	of.Close()
+
+	// Some final log messages
 	log.Printf("End of file\r\n")
 	log.Printf("Processing time: %v\r\n", time.Now().Sub(startTime))
 }
