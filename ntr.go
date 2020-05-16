@@ -60,6 +60,12 @@ func rot13(x byte) byte {
 	return x
 }
 
+// Progress bar drawing function
+func pbDraw(percent int, startTime time.Time) string {
+	progressBar := fmt.Sprintf("\r[%v%v%s%s] Processing time: %v seconds", strings.Repeat("#", percent/5), percent, "%", strings.Repeat("_", 20-percent/5), int(time.Now().Sub(startTime).Seconds()))
+	return progressBar
+}
+
 // Main entry point
 func main() {
 	// Memorizing current time for debugging purposes
@@ -126,14 +132,16 @@ func main() {
 
 	// Begin to process NTUSER.DAT
 	log.Printf("Start processing\r\n")
-
 	// Read every 4 bytes of file and compare with signatures
 	for i := 0; i < (len(data) / 4); i++ {
-		fmt.Printf("offset: %x value: %v utf-8: [ %v ]\n", i*4, data[i*4:(i+1)*4], string(data[i*4:(i+1)*4]))
+		percent := i / (len(data) / 400)
+		fmt.Printf("\r%s", pbDraw(percent, startTime))
+
+		//fmt.Printf("offset: %x value: %v utf-8: [ %v ]\n", i*4, data[i*4:(i+1)*4], string(data[i*4:(i+1)*4]))
 		// Program met 0x03 0x00 0x00 0x00 0x01 0x00 0x00 0x00 signature. Trying to recognize path to file
 		if bytes.Equal(data[i*4:(i+2)*4], []byte{3, 0, 0, 0, 1, 0, 0, 0}) {
 			for j, k := i+2, 0; ; j++ {
-				fmt.Printf("offset: %x value: %v utf-8: [ %v ]\n", j*4, data[j*4:(j+1)*4], string(data[j*4:(j+1)*4]))
+				//fmt.Printf("offset: %x value: %v utf-8: [ %v ]\n", j*4, data[j*4:(j+1)*4], string(data[j*4:(j+1)*4]))
 				if k > 100 {
 					substr = nil
 					i = j
@@ -178,5 +186,6 @@ func main() {
 
 	// Some final log messages
 	log.Printf("End of file\r\n")
-	log.Printf("Processing time: %v\r\n", time.Now().Sub(startTime))
+	log.Printf("Processing done! Total time: %v\r\n", time.Now().Sub(startTime))
+	fmt.Printf("Processing done! Total time: %v\r\n", time.Now().Sub(startTime))
 }
