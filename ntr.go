@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -38,6 +37,17 @@ func pathSwap(init string) string {
 	return init
 }
 
+// Function converts FILETIME to nanoseconds. Almost the same as in 'syscall' package
+func getNano(low, high uint32) int64 {
+	// 100-nanosecond intervals since January 1, 1601
+	nsec := int64(high)<<32 + int64(low)
+	// change starting time to the Epoch (00:00:00 UTC, January 1, 1970)
+	nsec -= 116444736000000000
+	// convert into nanoseconds
+	nsec *= 100
+	return nsec
+}
+
 // Rot13
 func rot13(x byte) byte {
 	y := rune(x)
@@ -56,9 +66,9 @@ func main() {
 	startTime := time.Now()
 
 	// Parsing command-line arguments
-	logFile := flag.String("log", "", "Path to log-file")
-	inputFile := flag.String("in", "NTUSER.DAT", "Path to NTUSER.DAT file")
-	outputFile := flag.String("out", "report.txt", "Path to file with output results")
+	logFile := flag.String("log", "", "Path to log-file (Example: -log=ntr.log)")
+	inputFile := flag.String("in", "NTUSER.DAT", "Path to NTUSER.DAT file (Example: -in=NTUSER/NTUSER7.DAT)")
+	outputFile := flag.String("out", "report.txt", "Path to file with output results (Example: -in=out.txt)")
 	flag.Parse()
 
 	// Trying to create or open existing log file
@@ -131,8 +141,8 @@ func main() {
 				}
 				// Program met 0xb0 0xff 0xff 0xff signature. Fill the fields of record in 'records' structure
 				if bytes.Equal(data[j*4:(j+1)*4], []byte{176, 255, 255, 255}) {
-					tmpTime := syscall.Filetime{binary.LittleEndian.Uint32(data[(j+16)*4 : (j+17)*4]), binary.LittleEndian.Uint32(data[(j+17)*4 : (j+18)*4])}
-					tmpRecord := record{(i + 2) * 4, pathSwap(string(substr)), binary.LittleEndian.Uint32(data[(j+2)*4 : (j+3)*4]), time.Unix(0, tmpTime.Nanoseconds())}
+					tmpTime := getNano(binary.LittleEndian.Uint32(data[(j+16)*4:(j+17)*4]), binary.LittleEndian.Uint32(data[(j+17)*4:(j+18)*4]))
+					tmpRecord := record{(i + 2) * 4, pathSwap(string(substr)), binary.LittleEndian.Uint32(data[(j+2)*4 : (j+3)*4]), time.Unix(0, tmpTime)}
 					records = append(records, tmpRecord)
 					i = j
 					substr = nil
