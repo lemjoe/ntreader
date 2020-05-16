@@ -166,6 +166,7 @@ func main() {
 
 	// Preprocessing of 'records' structure
 	lastExec := ""
+	fmt.Print("\n")
 	for a, b := range records {
 		// Checking is last execution time correct
 		if b.last.Sub(time.Now()).Hours() > 72 || b.last.Sub(time.Unix(0, 0)).Hours() < 0 {
@@ -174,7 +175,7 @@ func main() {
 			lastExec = fmt.Sprintf("%v", b.last)
 		}
 		// Building output string
-		message := []byte(fmt.Sprintf("Number: %v | Offset: %x | File: %v | Runs count: %v | Last launch: %v\r\n", a, b.offset, b.path, b.counter, lastExec))
+		message := []byte(fmt.Sprintf("Number: %v | Offset: %x | File: %v | Runs count: %v | Last launch: %v\r\n", a+1, b.offset, b.path, b.counter, lastExec))
 		// Write output string to file
 		if *outputFile != "" {
 			of.Write(message)
@@ -187,5 +188,7 @@ func main() {
 	// Some final log messages
 	log.Printf("End of file\r\n")
 	log.Printf("Processing done! Total time: %v\r\n", time.Now().Sub(startTime))
-	fmt.Printf("Processing done! Total time: %v\r\n", time.Now().Sub(startTime))
+	if *logFile != "" {
+		fmt.Printf("Processing done! Total time: %v\r\n", time.Now().Sub(startTime))
+	}
 }
