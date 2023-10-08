@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -89,7 +88,7 @@ func main() {
 	}
 
 	// Trying to open NTUSER.DAT file
-	data, err := ioutil.ReadFile(*inputFile)
+	data, err := os.ReadFile(*inputFile)
 	if err != nil {
 		log.Fatalf("File reading error:  %v\r\n", err)
 	}
