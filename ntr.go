@@ -61,7 +61,7 @@ func rot13(x byte) byte {
 
 // Progress bar drawing function
 func pbDraw(percent int, startTime time.Time) string {
-	progressBar := fmt.Sprintf("\r[%v%v%s%s] Processing time: %v seconds", strings.Repeat("#", percent/5), percent, "%", strings.Repeat("_", 20-percent/5), int(time.Now().Sub(startTime).Seconds()))
+	progressBar := fmt.Sprintf("\r[%v%v%s%s] Processing time: %v seconds", strings.Repeat("#", percent/5), percent, "%", strings.Repeat("_", 20-percent/5), int(time.Since(startTime).Seconds()))
 	return progressBar
 }
 
@@ -106,7 +106,7 @@ func main() {
 	// Reading GUIDs list from file
 	t1 := false
 	for scanner.Scan() {
-		if t1 == false {
+		if !t1 {
 			guids = strings.Split(fmt.Sprintln(scanner.Text()), "??")
 			t1 = true
 		}
@@ -132,7 +132,7 @@ func main() {
 	// Begin to process NTUSER.DAT
 	log.Printf("Start processing\r\n")
 	// Read every 4 bytes of file and compare with signatures
-	for i := 0; i < (len(data) / 4); i++ {
+	for i := 0; i < (len(data)/4)-1; i++ {
 		percent := i / (len(data) / 400)
 		fmt.Printf("\r%s", pbDraw(percent, startTime))
 
@@ -180,14 +180,14 @@ func main() {
 			of.Write(message)
 		}
 		// Print output string
-		fmt.Printf(string(message))
+		fmt.Print(string(message))
 	}
 	of.Close()
 
 	// Some final log messages
 	log.Printf("End of file\r\n")
-	log.Printf("Processing done! Total time: %v\r\n", time.Now().Sub(startTime))
+	log.Printf("Processing done! Total time: %v\r\n", time.Since(startTime))
 	if *logFile != "" {
-		fmt.Printf("Processing done! Total time: %v\r\n", time.Now().Sub(startTime))
+		fmt.Printf("Processing done! Total time: %v\r\n", time.Since(startTime))
 	}
 }
